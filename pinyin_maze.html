@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>拼音小勇士·迷宫大冒险</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#1a0a2e; font-family:'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+
+#game-container {
+  position:relative; width:100vw; height:100vh; display:flex;
+  flex-direction:column; align-items:center; justify-content:center;
+}
+
+/* 竖屏提示 */
+#rotate-hint {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.9); z-index:9999; justify-content:center;
+  align-items:center; flex-direction:column; color:#fff; font-size:24px; gap:20px;
+}
+#rotate-hint .icon { font-size:80px; animation:rotate-hint 2s infinite; }
+@keyframes rotate-hint { 0%,100%{transform:rotate(0)} 50%{transform:rotate(90deg)} }
+@media (orientation:portrait) { #rotate-hint { display:flex; } }
+
+canvas { display:block; border-radius:12px; box-shadow:0 0 40px rgba(100,200,255,0.3); }
+
+/* 顶部状态栏 */
+#side-left {
+  position:absolute; left:6px; top:50%; transform:translateY(-50%);
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  padding:16px 8px; z-index:10;
+  background:rgba(0,0,0,0.65); border-radius:20px;
+  backdrop-filter:blur(8px); border:2px solid rgba(255,255,255,0.12);
+  width:95px;
+}
+.carried-letter {
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+}
+.carried-letter .card-icon {
+  width:48px; height:48px; border-radius:12px; display:flex;
+  align-items:center; justify-content:center; font-size:24px; font-weight:bold;
+  color:#fff; transition:all 0.3s;
+}
+.carried-letter .card-icon.empty { background:rgba(255,255,255,0.08); border:2px dashed rgba(255,255,255,0.25); }
+.carried-letter .card-icon.initial { background:#ff6b6b; border:2px solid #ff4444; }
+.carried-letter .card-icon.final { background:#4ecdc4; border:2px solid #2ecc71; }
+.carried-letter .card-icon.overall { background:#a29bfe; border:2px solid #6c5ce7; }
+.carried-letter .label { color:#aaa; font-size:11px; }
+.energy-display { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.energy-star { font-size:22px; transition:all 0.3s; }
+.energy-star.inactive { opacity:0.2; transform:scale(0.75); }
+.level-name { color:#fff; font-size:12px; font-weight:bold; text-align:center; line-height:1.3; white-space:normal; }
+
+/* 底部按钮栏 */
+#side-right {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  display:flex; flex-direction:column; gap:8px; z-index:10;
+  padding:8px; width:85px;
+  background:rgba(0,0,0,0.5); border-radius:18px;
+  backdrop-filter:blur(8px); border:2px solid rgba(255,255,255,0.1);
+}
+.game-btn {
+  padding:8px 6px; border-radius:14px; border:none; font-size:13px;
+  font-weight:bold; cursor:pointer; transition:all 0.2s;
+  font-family:inherit; color:#fff; backdrop-filter:blur(10px);
+}
+.game-btn:hover { transform:scale(1.05); }
+.game-btn:active { transform:scale(0.95); }
+#btn-back { background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.3); }
+#btn-reset { background:rgba(255,165,0,0.3); border:2px solid rgba(255,165,0,0.5); }
+#btn-hint { background:rgba(100,200,255,0.3); border:2px solid rgba(100,200,255,0.5); }
+#btn-sound { background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.3); font-size:16px; padding:8px 6px; }
+
+/* 关卡选择面板 */
+#level-select {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:20;
+  display:flex; flex-direction:column; align-items:center; gap:20px;
+}
+#level-select h1 {
+  color:#fff; font-size:36px; text-align:center;
+  text-shadow:0 0 20px rgba(100,200,255,0.5);
+}
+#level-select .subtitle { color:#aaa; font-size:16px; margin-top:-10px; }
+.level-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.level-card {
+  width:120px; height:120px; border-radius:16px; display:flex;
+  flex-direction:column; align-items:center; justify-content:center;
+  gap:8px; cursor:pointer; transition:all 0.3s; border:3px solid;
+  font-family:inherit; font-size:14px; color:#fff;
+}
+.level-card:hover { transform:translateY(-4px); box-shadow:0 8px 24px rgba(0,0,0,0.3); }
+.level-card.locked { opacity:0.4; cursor:not-allowed; }
+.level-card.locked:hover { transform:none; box-shadow:none; }
+.level-num { font-size:28px; font-weight:bold; }
+.level-stars { font-size:18px; }
+
+/* 弹窗 */
+.overlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center; z-index:30;
+  background:rgba(0,0,0,0.7); animation:fadeIn 0.3s;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.popup {
+  background:linear-gradient(135deg,#1a1a2e,#16213e);
+  border-radius:20px; padding:32px; text-align:center;
+  border:3px solid rgba(255,255,255,0.2); color:#fff;
+  max-width:420px; width:90%;
+}
+.popup h2 { font-size:28px; margin-bottom:12px; }
+.popup .stars-display { font-size:40px; margin:12px 0; }
+.popup p { color:#ccc; margin:8px 0; }
+.popup-btns { display:flex; gap:12px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+
+/* 提示浮层 */
+#toast {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  pointer-events:none; z-index:25; color:#fff; font-size:28px; font-weight:bold;
+  text-shadow:0 0 10px rgba(255,255,255,0.5);
+  animation:toastPop 0.8s ease-out forwards; white-space:nowrap;
+}
+@keyframes toastPop {
+  0% { opacity:0; transform:translate(-50%,-50%) scale(0.5); }
+  30% { opacity:1; transform:translate(-50%,-50%) scale(1.2); }
+  100% { opacity:0; transform:translate(-50%,-70%) scale(1); }
+}
+
+/* 组合反馈 */
+#combo-text {
+  position:absolute; pointer-events:none; z-index:25;
+  font-size:32px; font-weight:bold; color:#ffd700;
+  text-shadow:0 0 15px rgba(255,215,0,0.8);
+  animation:comboFloat 1s ease-out forwards;
+}
+@keyframes comboFloat {
+  0% { opacity:1; transform:translateY(0) scale(0.5); }
+  50% { opacity:1; transform:translateY(-30px) scale(1.1); }
+  100% { opacity:0; transform:translateY(-60px) scale(1); }
+}
+</style>
+</head>
+<body>
+<div id="rotate-hint">
+  <div class="icon">📱</div>
+  <div>请横屏使用以获得最佳体验</div>
+</div>
+
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="side-left" style="display:none">
+    <div class="carried-letter">
+      <span class="label">携带</span>
+      <div class="card-icon empty" id="carried-icon"></div>
+    </div>
+    <div class="energy-display" id="energy-display"></div>
+    <div class="level-name" id="level-name-display"></div>
+  </div>
+
+  <div id="side-right" style="display:none">
+    <button class="game-btn" id="btn-back">选关</button>
+    <button class="game-btn" id="btn-reset">重置</button>
+    <button class="game-btn" id="btn-hint">提示</button>
+    <button class="game-btn" id="btn-sound">🔊</button>
+  </div>
+
+  <div id="level-select"></div>
+  <div id="toast"></div>
+  <div id="combo-text"></div>
+</div>
+
+<script>
+// =========================== 拼音数据库 ===========================
+const PINYIN = {
+  initials: ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','ch','sh','r','z','c','s','y','w'],
+  finals: ['a','o','e','i','u','ü','ai','ei','ui','ao','ou','iu','ie','üe','er','an','en','in','un','ün','ang','eng','ing','ong','ia','iao','ian','iang','iong','ua','uo','uai','uan','uang','ueng','üan'],
+  overall: ['zhi','chi','shi','ri','zi','ci','si','yi','wu','yu','ye','yue','yuan','yin','yun','ying'],
+
+  // 合法声母+韵母组合 -> 对应汉字和读音
+  combos: {
+    'b+a':'八-bā','b+o':'波-bō','b+i':'比-bǐ','b+u':'不-bù',
+    'b+ai':'白-bái','b+ei':'杯-bēi','b+ao':'包-bāo','b+an':'班-bān','b+en':'本-běn','b+ang':'帮-bāng','b+eng':'蹦-bèng','b+ing':'冰-bīng',
+    'b+ia':'变-biàn','b+iao':'表-biǎo','b+ian':'边-biān',
+    'p+a':'爬-pá','p+o':'破-pò','p+i':'皮-pí','p+u':'普-pǔ',
+    'p+ai':'拍-pāi','p+ei':'配-pèi','p+ao':'跑-pǎo','p+an':'盘-pán','p+en':'盆-pén','p+ang':'胖-pàng','p+eng':'朋-péng','p+ing':'平-píng',
+    'p+ia':'偏-piān','p+iao':'飘-piāo','p+ian':'片-piàn',
+    'm+a':'妈-mā','m+o':'摸-mō','m+e':'么-me','m+i':'米-mǐ','m+u':'木-mù',
+    'm+ai':'买-mǎi','m+ei':'美-měi','m+ao':'猫-māo','m+ou':'某-mǒu','m+an':'慢-màn','m+en':'门-mén','m+ang':'忙-máng','m+eng':'梦-mèng','m+ing':'明-míng',
+    'm+ian':'面-miàn','m+iao':'妙-miào','m+iu':'谬-miù',
+    'f+a':'发-fā','f+o':'佛-fó','f+u':'父-fù',
+    'f+ei':'飞-fēi','f+ou':'否-fǒu','f+an':'饭-fàn','f+en':'分-fēn','f+ang':'房-fáng','f+eng':'风-fēng',
+    'd+a':'大-dà','d+e':'的-de','d+i':'地-dì','d+u':'读-dú',
+    'd+ai':'带-dài','d+ei':'得-děi','d+ao':'到-dào','d+ou':'都-dōu','d+an':'但-dàn','d+ang':'当-dāng','d+eng':'等-děng','d+ing':'定-dìng','d+ong':'东-dōng',
+    'd+ia':'嗲-diǎ','d+ian':'点-diǎn','d+iao':'掉-diào','d+iu':'丢-diū','d+ui':'对-duì','d+uan':'短-duǎn','d+un':'吨-dūn','d+uo':'多-duō',
+    't+a':'他-tā','t+e':'特-tè','t+i':'体-tǐ','t+u':'图-tú',
+    't+ai':'太-tài','t+ao':'套-tào','t+ou':'头-tóu','t+an':'谈-tán','t+ang':'糖-táng','t+eng':'疼-téng','t+ing':'听-tīng','t+ong':'同-tóng',
+    't+ian':'天-tiān','t+iao':'条-tiáo','t+ie':'铁-tiě','t+ui':'推-tuī','t+uan':'团-tuán','t+un':'吞-tūn','t+uo':'脱-tuō',
+    'n+a':'那-nà','n+e':'呢-ne','n+i':'你-nǐ','n+u':'努-nǔ','n+ü':'女-nǚ',
+    'n+ai':'奶-nǎi','n+ei':'内-nèi','n+ao':'脑-nǎo','n+ou':'藕-ǒu','n+an':'南-nán','n+en':'嫩-nèn','n+ang':'囊-nāng','n+eng':'能-néng','n+ing':'宁-níng','n+ong':'农-nóng',
+    'n+ian':'年-nián','n+iao':'鸟-niǎo','n+ie':'捏-niē','n+iu':'牛-niú','n+uan':'暖-nuǎn','n+uo':'挪-nuó','n+üe':'虐-nüè',
+    'l+a':'拉-lā','l+e':'乐-lè','l+i':'里-lǐ','l+u':'路-lù','l+ü':'绿-lǜ',
+    'l+ai':'来-lái','l+ei':'类-lèi','l+ao':'老-lǎo','l+ou':'楼-lóu','l+an':'蓝-lán','l+ang':'狼-láng','l+eng':'冷-lěng','l+ing':'零-líng','l+ong':'龙-lóng',
+    'l+ia':'俩-liǎ','l+ian':'连-lián','l+iao':'了-liǎo','l+ie':'列-liè','l+iu':'六-liù','l+uan':'乱-luàn','l+un':'论-lùn','l+uo':'落-luò','l+üe':'略-lüè',
+    'g+a':'嘎-gā','g+e':'个-gè','g+u':'古-gǔ',
+    'g+ai':'该-gāi','g+ei':'给-gěi','g+ao':'高-gāo','g+ou':'狗-gǒu','g+an':'干-gàn','g+en':'根-gēn','g+ang':'刚-gāng','g+eng':'更-gèng','g+ong':'工-gōng',
+    'g+ui':'柜-guì','g+ua':'瓜-guā','g+uo':'国-guó','g+uai':'怪-guài','g+uan':'关-guān','g+uang':'光-guāng','g+un':'滚-gǔn',
+    'k+a':'卡-kǎ','k+e':'可-kě','k+u':'哭-kū',
+    'k+ai':'开-kāi','k+ao':'考-kǎo','k+ou':'口-kǒu','k+an':'看-kàn','k+en':'肯-kěn','k+ang':'康-kāng','k+eng':'坑-kēng','k+ong':'空-kōng',
+    'k+ui':'亏-kuī','k+ua':'夸-kuā','k+uo':'扩-kuò','k+uai':'快-kuài','k+uan':'宽-kuān','k+uang':'狂-kuáng','k+un':'困-kùn',
+    'h+a':'哈-hā','h+e':'和-hé','h+u':'虎-hǔ',
+    'h+ai':'还-hái','h+ei':'黑-hēi','h+ao':'好-hǎo','h+ou':'后-hòu','h+an':'汉-hàn','h+en':'很-hěn','h+ang':'航-háng','h+eng':'横-héng','h+ong':'红-hóng',
+    'h+ui':'会-huì','h+ua':'花-huā','h+uo':'火-huǒ','h+uai':'坏-huài','h+uan':'欢-huān','h+uang':'黄-huáng','h+un':'婚-hūn',
+    'j+i':'鸡-jī','j+u':'句-jù',
+    'j+ia':'家-jiā','j+iao':'叫-jiào','j+ian':'见-jiàn','j+iang':'江-jiāng','j+iong':'窘-jiǒng','j+ie':'姐-jiě','j+iu':'九-jiǔ','j+in':'金-jīn','j+ing':'京-jīng',
+    'j+ü':'句-jù','j+üe':'决-jué','j+üan':'卷-juǎn','j+ün':'军-jūn',
+    'q+i':'七-qī','q+u':'去-qù',
+    'q+ia':'恰-qià','q+iao':'桥-qiáo','q+ian':'前-qián','q+iang':'强-qiáng','q+iong':'穷-qióng','q+ie':'切-qiē','q+iu':'秋-qiū','q+in':'亲-qīn','q+ing':'清-qīng',
+    'q+ü':'去-qù','q+üe':'却-què','q+üan':'全-quán','q+ün':'群-qún',
+    'x+i':'西-xī','x+u':'许-xǔ',
+    'x+ia':'下-xià','x+iao':'小-xiǎo','x+ian':'先-xiān','x+iang':'想-xiǎng','x+iong':'熊-xióng','x+ie':'写-xiě','x+iu':'修-xiū','x+in':'新-xīn','x+ing':'星-xīng',
+    'x+ü':'许-xǔ','x+üe':'学-xué','x+üan':'选-xuǎn','x+ün':'寻-xún',
+    'zh+a':'扎-zhā','zh+e':'这-zhè','zh+u':'猪-zhū',
+    'zh+ai':'摘-zhāi','zh+ei':'这-zhèi','zh+ao':'找-zhǎo','zh+ou':'周-zhōu','zh+an':'站-zhàn','zh+en':'真-zhēn','zh+ang':'张-zhāng','zh+eng':'正-zhèng','zh+ong':'中-zhōng',
+    'zh+ui':'追-zhuī','zh+ua':'抓-zhuā','zh+uo':'桌-zhuō','zh+uai':'拽-zhuài','zh+uan':'转-zhuǎn','zh+uang':'装-zhuāng','zh+un':'准-zhǔn',
+    'ch+a':'茶-chá','ch+e':'车-chē','ch+u':'出-chū',
+    'ch+ai':'拆-chāi','ch+ao':'超-chāo','ch+ou':'抽-chōu','ch+an':'产-chǎn','ch+en':'陈-chén','ch+ang':'长-cháng','ch+eng':'成-chéng','ch+ong':'虫-chóng',
+    'ch+ui':'吹-chuī','ch+ua':'歘-chuā','ch+uo':'戳-chuō','ch+uai':'揣-chuāi','ch+uan':'穿-chuān','ch+uang':'窗-chuāng','ch+un':'春-chūn',
+    'sh+a':'沙-shā','sh+e':'蛇-shé','sh+u':'书-shū',
+    'sh+ai':'晒-shài','sh+ei':'谁-shéi','sh+ao':'少-shǎo','sh+ou':'手-shǒu','sh+an':'山-shān','sh+en':'深-shēn','sh+ang':'上-shàng','sh+eng':'生-shēng',
+    'sh+ui':'水-shuǐ','sh+ua':'刷-shuā','sh+uo':'说-shuō','sh+uai':'帅-shuài','sh+uan':'拴-shuān','sh+uang':'双-shuāng','sh+un':'顺-shùn',
+    'r+e':'热-rè','r+u':'如-rú',
+    'r+ao':'绕-rào','r+ou':'肉-ròu','r+an':'然-rán','r+en':'人-rén','r+ang':'让-ràng','r+eng':'仍-réng','r+ong':'容-róng',
+    'r+ui':'瑞-ruì','r+ua':'挼-ruá','r+uo':'若-ruò','r+uan':'软-ruǎn','r+un':'润-rùn',
+    'z+a':'杂-zá','z+e':'则-zé','z+u':'组-zǔ',
+    'z+ai':'在-zài','z+ei':'贼-zéi','z+ao':'早-zǎo','z+ou':'走-zǒu','z+an':'赞-zàn','z+en':'怎-zěn','z+ang':'脏-zāng','z+eng':'增-zēng','z+ong':'总-zǒng',
+    'z+ui':'最-zuì','z+uo':'做-zuò','z+uan':'钻-zuān','z+un':'尊-zūn',
+    'c+a':'擦-cā','c+e':'册-cè','c+u':'粗-cū',
+    'c+ai':'才-cái','c+ao':'草-cǎo','c+ou':'凑-còu','c+an':'参-cān','c+en':'岑-cén','c+ang':'仓-cāng','c+eng':'层-céng','c+ong':'从-cóng',
+    'c+ui':'脆-cuì','c+uo':'错-cuò','c+uan':'窜-cuàn','c+un':'村-cūn',
+    's+a':'洒-sǎ','s+e':'色-sè','s+u':'苏-sū',
+    's+ai':'赛-sài','s+ao':'扫-sǎo','s+ou':'搜-sōu','s+an':'三-sān','s+en':'森-sēn','s+ang':'桑-sāng','s+eng':'僧-sēng','s+ong':'送-sòng',
+    's+ui':'岁-suì','s+uo':'所-suǒ','s+uan':'算-suàn','s+un':'孙-sūn',
+    'y+a':'牙-yá','y+o':'哟-yō','y+e':'也-yě','y+i':'一-yī','y+u':'鱼-yú',
+    'y+ai':'崖-yái','y+ao':'要-yào','y+ou':'有-yǒu','y+an':'言-yán','y+en':'音-yīn','y+ang':'羊-yáng','y+eng':'英-yīng','y+ong':'用-yòng',
+    'y+in':'音-yīn','y+ing':'英-yīng',
+    'w+a':'蛙-wā','w+o':'我-wǒ','w+e':'窝-wō','w+u':'五-wǔ',
+    'w+ai':'外-wài','w+ei':'为-wèi','w+an':'万-wàn','w+en':'问-wèn','w+ang':'王-wáng','w+eng':'翁-wēng',
+  },
+
+  // 拼音字母→中文近似发音（供语音朗读使用，解决英文字母发音问题）
+  pronounce: {
+    'b':'波','p':'坡','m':'摸','f':'佛','d':'得','t':'特','n':'呢','l':'了',
+    'g':'哥','k':'科','h':'喝','j':'鸡','q':'七','x':'西',
+    'zh':'知','ch':'吃','sh':'诗','r':'日','z':'资','c':'雌','s':'思','y':'衣','w':'乌',
+    'a':'啊','o':'喔','e':'鹅','i':'衣','u':'乌','ü':'鱼',
+    'ai':'哀','ei':'欸','ui':'威','ao':'奥','ou':'欧','iu':'优',
+    'ie':'耶','üe':'约','er':'儿',
+    'an':'安','en':'恩','in':'音','un':'温','ün':'晕',
+    'ang':'昂','eng':'鞥','ing':'英','ong':'翁',
+    'ia':'呀','iao':'腰','ian':'烟','iang':'央','iong':'雍',
+    'ua':'蛙','uo':'窝','uai':'歪','uan':'弯','uang':'汪','ueng':'翁','üan':'冤',
+    'zhi':'知','chi':'吃','shi':'诗','ri':'日','zi':'资','ci':'雌','si':'思',
+    'yi':'衣','wu':'乌','yu':'鱼','ye':'耶','yue':'约','yuan':'冤',
+    'yin':'音','yun':'晕','ying':'英',
+  },
+
+  // 整体认读音节 -> 汉字
+  overallMap: {
+    'zhi':'知-zhī','chi':'吃-chī','shi':'诗-shī','ri':'日-rì',
+    'zi':'字-zì','ci':'词-cí','si':'四-sì',
+    'yi':'一-yī','wu':'五-wǔ','yu':'鱼-yú',
+    'ye':'叶-yè','yue':'月-yuè','yuan':'圆-yuán',
+    'yin':'音-yīn','yun':'云-yún','ying':'鹰-yīng'
+  },
+
+  getType(letter) {
+    if (this.overall.includes(letter)) return 'overall';
+    if (this.initials.includes(letter)) return 'initial';
+    if (this.finals.includes(letter)) return 'final';
+    return null;
+  },
+
+  checkCombo(a, b) {
+    let key = a + '+' + b;
+    if (this.combos[key]) return this.combos[key];
+    key = b + '+' + a;
+    if (this.combos[key]) return this.combos[key];
+    return null;
+  }
+};
+
+// =========================== 随机迷宫生成 ===========================
+function SeededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function generateMaze(cols, rows, seed) {
+  // 确保尺寸为奇数（迷宫算法需要）
+  if (cols % 2 === 0) cols--;
+  if (rows % 2 === 0) rows--;
+  const rand = SeededRandom(seed);
+  const grid = Array.from({length: rows}, () => Array(cols).fill(1));
+
+  // 递归回溯法生成完美迷宫
+  const stack = [[1, 1]];
+  grid[1][1] = 0;
+
+  while (stack.length > 0) {
+    const [cx, cy] = stack[stack.length - 1];
+    const neighbors = [];
+    for (const [dx, dy] of [[0, -2], [2, 0], [0, 2], [-2, 0]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1 && grid[ny][nx] === 1) {
+        neighbors.push([nx, ny, dx / 2, dy / 2]);
+      }
+    }
+    if (neighbors.length === 0) {
+      stack.pop();
+    } else {
+      const [nx, ny, wx, wy] = neighbors[Math.floor(rand() * neighbors.length)];
+      grid[cy + wy][cx + wx] = 0;
+      grid[ny][nx] = 0;
+      stack.push([nx, ny]);
+    }
+  }
+
+  // 极少环路（保持大量死胡同，增加探索难度）
+  const loopCount = Math.floor(cols * rows * 0.015);
+  for (let i = 0; i < loopCount; i++) {
+    const x = 2 + Math.floor(rand() * (cols - 4));
+    const y = 2 + Math.floor(rand() * (rows - 4));
+    if (grid[y][x] === 1) {
+      let floorNeighbors = 0;
+      for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+        if (grid[y + dy][x + dx] === 0) floorNeighbors++;
+      }
+      if (floorNeighbors >= 2) grid[y][x] = 0;
+    }
+  }
+
+  // 放置起点
+  grid[1][1] = 2;
+
+  // 放置终点（右下角区域），出口被两道墙封锁，需更多能量破墙
+  const ex = cols - 2, ey = rows - 2;
+  grid[ey][ex] = 3;
+  // 堵住出口上方
+  if (grid[ey - 1][ex] === 0) {
+    grid[ey - 1][ex] = 1;
+    if (grid[ey - 1][ex - 1] === 1) grid[ey - 1][ex - 1] = 0;
+  }
+  // 堵住出口左侧
+  if (grid[ey][ex - 1] === 0) grid[ey][ex - 1] = 1;
+  // 在出口左侧加第二道墙
+  if (ex >= 3 && grid[ey][ex - 2] === 0) {
+    grid[ey][ex - 2] = 1;
+    // 确保有路径可到达第二道墙旁边
+    if (grid[ey - 1][ex - 2] === 1) grid[ey - 1][ex - 2] = 0;
+  }
+
+  return grid;
+}
+
+// 在地板上随机放置卡片
+function placeCards(grid, config, seed) {
+  const rand = SeededRandom(seed + 1000);
+  const rows = grid.length, cols = grid[0].length;
+  const floors = [];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      // 收集所有地板格子（排除起点和出口）
+      if (grid[y][x] === 0) {
+        // 离起点至少3步距离
+        if (Math.abs(x - 1) + Math.abs(y - 1) >= 4) {
+          floors.push({x, y});
+        }
+      }
+    }
+  }
+
+  // 打乱地板位置
+  for (let i = floors.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [floors[i], floors[j]] = [floors[j], floors[i]];
+  }
+
+  // 放置卡片
+  const cards = [];
+  let idx = 0;
+  const allLetters = [...config.initials, ...config.finals, ...config.overalls];
+
+  // 确保组合所需的配对在迷宫不同区域
+  const paired = new Set();
+  for (const combo of config.requiredCombos) {
+    paired.add(combo[0]);
+    paired.add(combo[1]);
+  }
+
+  // 先放置配对卡片（确保它们在迷宫中）
+  const pairedLetters = [];
+  const otherLetters = [];
+  for (const letter of allLetters) {
+    if (paired.has(letter)) {
+      pairedLetters.push(letter);
+    } else {
+      otherLetters.push(letter);
+    }
+  }
+
+  // 放置所有卡片
+  const placed = [...pairedLetters, ...otherLetters];
+  for (let i = 0; i < Math.min(placed.length, floors.length); i++) {
+    cards.push({
+      x: floors[i].x,
+      y: floors[i].y,
+      letter: placed[i],
+      collected: false,
+      idx: i
+    });
+  }
+
+  return cards;
+}
+
+// =========================== 关卡配置 ===========================
+const LEVEL_CONFIGS = [
+  { // 关卡1: b,p,m,f + a,o,i  (31×21 ≈ 4×165 原面积)
+    id: 1, name: '第1关·声母小径', size: [31, 21],
+    initials: ['b','p','m','f','b','p','m','f','b','p'],
+    finals: ['a','o','i','a','o','i','a','o','i','a','o'],
+    overalls: [],
+    requiredCombos: [['b','a'],['p','o'],['m','i'],['f','a']],
+    minCombos: 1, theme: '森林'
+  },
+  { // 关卡2: d,t,n,l + a,e,i,u
+    id: 2, name: '第2关·探索之路', size: [31, 21],
+    initials: ['d','t','n','l','d','t','n','l','d','t','n','l'],
+    finals: ['a','e','i','u','a','e','i','u','a','e','i','u'],
+    overalls: [],
+    requiredCombos: [['d','a'],['n','i'],['t','u'],['l','e'],['d','u'],['n','a']],
+    minCombos: 2, theme: '草原'
+  },
+  { // 关卡3: g,k,h + ai,ei,ui
+    id: 3, name: '第3关·韵母森林', size: [31, 21],
+    initials: ['g','k','h','g','k','h','g','k','h','g','k','h'],
+    finals: ['ai','ei','ui','ai','ei','ui','ai','ei','ui','a','e','u'],
+    overalls: [],
+    requiredCombos: [['g','ai'],['k','ei'],['h','ui'],['g','ui'],['k','ui'],['h','ai'],['g','ei']],
+    minCombos: 3, theme: '森林'
+  },
+  { // 关卡4: j,q,x + i,ü,ie,üe
+    id: 4, name: '第4关·奇妙王国', size: [31, 21],
+    initials: ['j','q','x','j','q','x','j','q','x','j'],
+    finals: ['i','ü','ia','ie','üe','i','ü','ia','ie','üe','i','ü'],
+    overalls: [],
+    requiredCombos: [['j','i'],['q','ü'],['x','ia'],['j','ie'],['q','üe'],['x','i']],
+    minCombos: 3, theme: '糖果'
+  },
+  { // 关卡5: 平翘舌 z,c,s,zh,ch,sh,r
+    id: 5, name: '第5关·舌尖挑战', size: [35, 25],
+    initials: ['zh','ch','sh','r','z','c','s','zh','ch','sh','r','z','c','s','zh','ch','sh'],
+    finals: ['a','e','u','a','e','u','a','e','u','a','e','u','a','e','u','a','e','u'],
+    overalls: [],
+    requiredCombos: [['zh','a'],['ch','e'],['sh','u'],['z','a'],['c','e'],['s','u'],['r','u']],
+    minCombos: 3, theme: '星空'
+  },
+  { // 关卡6: 鼻韵母及整体认读音节
+    id: 6, name: '第6关·终极迷宫', size: [35, 25],
+    initials: ['b','m','d','h','zh','n','l','b','m','d','h','zh','n'],
+    finals: ['ang','eng','ong','an','en','ing','ang','eng','ong','an','en','ing','ang','eng'],
+    overalls: ['yi','wu','yu','ye','yue','zhi','chi'],
+    requiredCombos: [['b','ang'],['m','eng'],['d','ong'],['h','an'],['zh','en'],['n','ing']],
+    minCombos: 3, theme: '彩虹'
+  },
+];
+
+// =========================== 游戏状态 ===========================
+const state = {
+  currentLevel: null,
+  grid: null,
+  cards: [],
+  playerPos: null,
+  carried: null, // {letter, type, cardIdx}
+  energy: 0,
+  maxEnergy: 3,
+  completedCombos: [],
+  path: [],
+  moving: false,
+  animFrame: null,
+  particleSystem: null,
+  hintActive: false,
+  soundOn: true,
+};
+
+// =========================== 进度保存 ===========================
+function loadProgress() {
+  try {
+    return JSON.parse(localStorage.getItem('pinyin_maze_progress') || '{}');
+  } catch(e) { return {}; }
+}
+function saveProgress(progress) {
+  try {
+    localStorage.setItem('pinyin_maze_progress', JSON.stringify(progress));
+  } catch(e) {}
+}
+
+// =========================== 音效系统 ===========================
+const Audio = {
+  ctx: null,
+  init() {
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e) { this.ctx = null; }
+  },
+  play(freq, duration, type='sine', vol=0.1) {
+    if (!this.ctx || !state.soundOn) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(); osc.stop(this.ctx.currentTime + duration);
+    } catch(e) {}
+  },
+  sfx_pickup() { this.play(880, 0.15, 'sine', 0.12); this.play(1320, 0.12, 'sine', 0.08); },
+  sfx_success() { this.play(523, 0.1, 'sine', 0.1); setTimeout(()=>this.play(659, 0.1),100); setTimeout(()=>this.play(784, 0.15),200); },
+  sfx_fail() { this.play(150, 0.25, 'square', 0.08); },
+  sfx_break() { this.play(60, 0.3, 'sawtooth', 0.1); this.play(200, 0.1, 'square', 0.05); },
+  sfx_win() { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>this.play(f,0.3,'sine',0.12),i*120)); },
+  sfx_click() { this.play(600, 0.08, 'sine', 0.06); },
+};
+
+// 语音朗读 (Web Speech API)
+function speak(text) {
+  if (!state.soundOn) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.8; u.pitch = 1.1;
+    u.volume = 0.9;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  } catch(e) {}
+}
+
+// =========================== 粒子系统 ===========================
+class ParticleSystem {
+  constructor() { this.particles = []; }
+  emit(x, y, count, config={}) {
+    for (let i=0;i<count;i++) {
+      const angle = Math.random()*Math.PI*2;
+      const speed = (config.speed||2) * (0.5+Math.random());
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle)*speed,
+        vy: Math.sin(angle)*speed - (config.upward||0),
+        life: 1,
+        decay: 0.02 + Math.random()*0.03,
+        size: config.size||4 + Math.random()*6,
+        color: config.colors[Math.floor(Math.random()*config.colors.length)],
+      });
+    }
+  }
+  update() {
+    for (let i=this.particles.length-1;i>=0;i--) {
+      const p = this.particles[i];
+      p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+      if (p.life <= 0) this.particles.splice(i,1);
+    }
+  }
+  draw(ctx) {
+    for (const p of this.particles) {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size*p.life, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  clear() { this.particles = []; }
+}
+
+// =========================== 迷宫渲染 ===========================
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+let cellSize = 0, offsetX = 0, offsetY = 0;
+
+function calcLayout() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const SIDE_LEFT = 100;
+  const SIDE_RIGHT = 90;
+  const availW = w - SIDE_LEFT - SIDE_RIGHT - 8;
+  const availH = h - 12;
+  const level = state.currentLevel;
+  if (!level) return;
+  const [cols, rows] = level.size;
+  cellSize = Math.floor(Math.min(availW/cols, availH/rows));
+  offsetX = SIDE_LEFT + Math.floor((availW - cellSize*cols) / 2);
+  offsetY = Math.floor((h - cellSize*rows) / 2);
+  canvas.width = w;
+  canvas.height = h;
+}
+
+// 主题颜色
+const THEMES = {
+  '森林': { bg:'#2d5016', floor:'#5a9e3e', wall:'#3d2817', wallTop:'#5c3d2e', start:'#7ec850', exit:'#ffd700' },
+  '草原': { bg:'#4a7c2e', floor:'#8bc34a', wall:'#5d4037', wallTop:'#795548', start:'#aed581', exit:'#ffeb3b' },
+  '糖果': { bg:'#e91e63', floor:'#f8bbd0', wall:'#7b1fa2', wallTop:'#9c27b0', start:'#ff80ab', exit:'#ffd740' },
+  '星空': { bg:'#1a237e', floor:'#3949ab', wall:'#0d0d2b', wallTop:'#1a1a4e', start:'#5c6bc0', exit:'#ffd54f' },
+  '彩虹': { bg:'#4a148c', floor:'#7b1fa2', wall:'#311b92', wallTop:'#4527a0', start:'#ce93d8', exit:'#ffea00' },
+};
+
+function drawMaze() {
+  const level = state.currentLevel;
+  if (!level) return;
+  const theme = THEMES[level.theme] || THEMES['森林'];
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 背景
+  ctx.fillStyle = theme.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const [cols, rows] = level.size;
+  for (let y=0; y<rows; y++) {
+    for (let x=0; x<cols; x++) {
+      const cx = offsetX + x*cellSize, cy = offsetY + y*cellSize;
+      const cell = state.grid[y][x];
+
+      if (cell === 1) {
+        // 墙壁 - 3D效果
+        ctx.fillStyle = theme.wall;
+        ctx.fillRect(cx+2, cy+2, cellSize-4, cellSize-4);
+        ctx.fillStyle = theme.wallTop;
+        ctx.fillRect(cx+2, cy+2, cellSize-4, cellSize*0.35);
+        // 边缘
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx+2, cy+2, cellSize-4, cellSize-4);
+      } else {
+        // 地板
+        ctx.fillStyle = theme.floor;
+        ctx.fillRect(cx+1, cy+1, cellSize-2, cellSize-2);
+        // 网格线
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx+1, cy+1, cellSize-2, cellSize-2);
+
+        // 起点标记
+        if (cell === 2) {
+          ctx.fillStyle = theme.start;
+          ctx.beginPath();
+          ctx.arc(cx+cellSize/2, cy+cellSize/2, cellSize*0.3, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.font = `${cellSize*0.3}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('▶', cx+cellSize/2, cy+cellSize/2);
+        }
+        // 出口标记
+        if (cell === 3) {
+          const pulse = 0.7 + 0.3*Math.sin(Date.now()/400);
+          ctx.fillStyle = theme.exit;
+          ctx.globalAlpha = pulse;
+          ctx.beginPath();
+          ctx.arc(cx+cellSize/2, cy+cellSize/2, cellSize*0.25, 0, Math.PI*2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold '+(cellSize*0.3)+'px sans-serif';
+          ctx.fillText('🚩', cx+cellSize/2, cy+cellSize/2);
+        }
+      }
+    }
+  }
+
+  // 提示高亮
+  if (state.hintActive && state.carried) {
+    const targetType = state.carried.type === 'initial' ? 'final' : 'initial';
+    const validCards = state.cards.filter(c => {
+      if (c.collected) return false;
+      if (PINYIN.getType(c.letter) === 'overall') return false;
+      if (PINYIN.getType(c.letter) !== targetType) return false;
+      return PINYIN.checkCombo(state.carried.letter, c.letter) !== null;
+    });
+    for (const card of validCards) {
+      const cx = offsetX + card.x*cellSize + cellSize/2;
+      const cy = offsetY + card.y*cellSize + cellSize/2;
+      const pulse = 0.5 + 0.3*Math.sin(Date.now()/300);
+      ctx.strokeStyle = `rgba(255,215,0,${pulse})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([4,4]);
+      ctx.strokeRect(cx-cellSize*0.45, cy-cellSize*0.45, cellSize*0.9, cellSize*0.9);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // 字母卡片
+  for (const card of state.cards) {
+    if (card.collected) continue;
+    const cx = offsetX + card.x*cellSize + cellSize/2;
+    const cy = offsetY + card.y*cellSize + cellSize/2;
+    const type = PINYIN.getType(card.letter);
+    let cardColor, borderColor;
+    if (type === 'initial') { cardColor = '#ff6b6b'; borderColor = '#ff4444'; }
+    else if (type === 'final') { cardColor = '#4ecdc4'; borderColor = '#2ecc71'; }
+    else { cardColor = '#a29bfe'; borderColor = '#6c5ce7'; }
+
+    // 卡片背景
+    const cw = cellSize*0.7, ch = cellSize*0.7;
+    const r = cellSize*0.12;
+    ctx.fillStyle = cardColor;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 4;
+    roundRect(cx-cw/2, cy-ch/2, cw, ch, r);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // 字母文字
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold '+(cellSize*0.35)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(card.letter, cx, cy);
+
+    // 类型小标记
+    ctx.fillStyle = borderColor;
+    ctx.beginPath();
+    ctx.arc(cx+cw/2-4, cy-ch/2+4, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // 路径预览
+  if (state.path.length > 1) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath();
+    ctx.moveTo(offsetX+state.path[0].x*cellSize+cellSize/2, offsetY+state.path[0].y*cellSize+cellSize/2);
+    for (let i=1;i<state.path.length;i++) {
+      ctx.lineTo(offsetX+state.path[i].x*cellSize+cellSize/2, offsetY+state.path[i].y*cellSize+cellSize/2);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 角色（动画时使用插值位置）
+  let px, py;
+  if (canvas._animating) {
+    px = canvas._animX;
+    py = canvas._animY;
+  } else {
+    px = offsetX + state.playerPos.x*cellSize + cellSize/2;
+    py = offsetY + state.playerPos.y*cellSize + cellSize/2;
+  }
+  drawCharacter(px, py, cellSize*0.38);
+
+  // 粒子
+  if (state.particleSystem) {
+    state.particleSystem.draw(ctx);
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function drawCharacter(x, y, r) {
+  // 身体
+  const bodyGrad = ctx.createRadialGradient(x-r*0.2, y-r*0.2, r*0.1, x, y, r);
+  bodyGrad.addColorStop(0, '#ffe082');
+  bodyGrad.addColorStop(1, '#ff9800');
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#e65100';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 眼睛
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x-r*0.3, y-r*0.2, r*0.32, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+r*0.3, y-r*0.2, r*0.32, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(x-r*0.2, y-r*0.15, r*0.15, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+r*0.4, y-r*0.15, r*0.15, 0, Math.PI*2); ctx.fill();
+
+  // 微笑
+  ctx.strokeStyle = '#e65100';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y+r*0.05, r*0.3, 0.1*Math.PI, 0.9*Math.PI);
+  ctx.stroke();
+
+  // 携带字母
+  if (state.carried) {
+    const type = state.carried.type;
+    const color = type==='initial'?'#ff6b6b':type==='final'?'#4ecdc4':'#a29bfe';
+    ctx.fillStyle = color;
+    const bw = r*0.9, bh = r*0.7;
+    roundRect(x-bw, y-r*1.6, bw*2, bh, r*0.25);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold '+(r*0.7)+'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(state.carried.letter, x, y-r*1.6+bh/2);
+  }
+}
+
+// =========================== BFS寻路 ===========================
+function findPath(from, to) {
+  const [cols, rows] = state.currentLevel.size;
+  const visited = Array.from({length:rows}, ()=>Array(cols).fill(false));
+  const parent = Array.from({length:rows}, ()=>Array(cols).fill(null));
+  const queue = [from];
+  visited[from.y][from.x] = true;
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (cur.x === to.x && cur.y === to.y) {
+      // 重建路径
+      const path = [];
+      let p = cur;
+      while (p) { path.unshift(p); p = parent[p.y][p.x]; }
+      return path;
+    }
+    for (const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+      const nx = cur.x+dx, ny = cur.y+dy;
+      if (nx<0||nx>=cols||ny<0||ny>=rows) continue;
+      if (visited[ny][nx]) continue;
+      if (state.grid[ny][nx] === 1) continue; // 墙壁
+      visited[ny][nx] = true;
+      parent[ny][nx] = cur;
+      queue.push({x:nx, y:ny});
+    }
+  }
+  return null; // 无路可达
+}
+
+// =========================== 游戏逻辑 ===========================
+function startLevel(levelId) {
+  const config = LEVEL_CONFIGS.find(l=>l.id===levelId);
+  if (!config) return;
+
+  // 生成迷宫（使用关卡ID作为种子，保证同一关卡迷宫一致）
+  const [cols, rows] = config.size;
+  const grid = generateMaze(cols, rows, levelId * 12345 + 67890);
+  const cards = placeCards(grid, config, levelId * 98765 + 43210);
+
+  // 构建关卡对象（兼容旧代码，size取实际grid尺寸）
+  const level = {
+    ...config,
+    size: [grid[0].length, grid.length], // 实际生成的迷宫尺寸（可能被调整过）
+    grid: grid,
+    cards: cards,
+  };
+
+  state.currentLevel = level;
+  state.grid = grid;
+  state.cards = cards;
+  state.carried = null;
+  state.energy = 0;
+  state.completedCombos = [];
+  state.path = [];
+  state.moving = false;
+  state.hintActive = false;
+  state.particleSystem = new ParticleSystem();
+
+  // 找起点
+  for (let y=0;y<grid.length;y++)
+    for (let x=0;x<grid[0].length;x++)
+      if (state.grid[y][x]===2) { state.playerPos = {x,y}; }
+
+  calcLayout();
+  showGameUI();
+  updateUI();
+  startGameLoop();
+
+  setTimeout(()=>speak(level.name.replace(/第\d+关[·•]/,'')), 500);
+}
+
+function showGameUI() {
+  document.getElementById('side-left').style.display = 'flex';
+  document.getElementById('side-right').style.display = 'flex';
+  document.getElementById('level-select').style.display = 'none';
+  document.querySelectorAll('.overlay').forEach(e=>e.remove());
+}
+
+function updateUI() {
+  // 携带字母
+  const icon = document.getElementById('carried-icon');
+  icon.className = 'card-icon';
+  if (state.carried) {
+    icon.classList.add(state.carried.type);
+    icon.textContent = state.carried.letter;
+    icon.classList.remove('empty');
+  } else {
+    icon.classList.add('empty');
+    icon.textContent = '?';
+  }
+
+  // 能量显示
+  const ed = document.getElementById('energy-display');
+  let stars = '';
+  for (let i=0;i<state.maxEnergy;i++) {
+    stars += `<span class="energy-star${i>=state.energy?' inactive':''}">⚡</span>`;
+  }
+  ed.innerHTML = stars;
+
+  // 关卡名
+  document.getElementById('level-name-display').textContent = state.currentLevel.name;
+}
+
+function movePlayer(targetX, targetY) {
+  if (state.moving) return;
+
+  const cell = state.grid[targetY]?.[targetX];
+  if (cell === undefined || cell === 1) {
+    // 检查是否是相邻墙壁（破墙）
+    if (cell === 1) {
+      const dx = Math.abs(targetX - state.playerPos.x);
+      const dy = Math.abs(targetY - state.playerPos.y);
+      if (dx+dy === 1) {
+        if (state.energy > 0) {
+          breakWall(targetX, targetY);
+        } else {
+          showToast('需要能量才能破墙！先收集字母组合吧~');
+        }
+        return;
+      }
+    }
+    return;
+  }
+
+  const path = findPath(state.playerPos, {x:targetX, y:targetY});
+  if (!path || path.length <= 1) return;
+
+  state.path = path;
+  state.moving = true;
+  executePath(0);
+}
+
+function executePath(idx) {
+  if (idx >= state.path.length) {
+    state.moving = false;
+    state.path = [];
+    checkWin();
+    return;
+  }
+
+  const target = state.path[idx];
+  animateStep(state.playerPos, target, () => {
+    state.playerPos = target;
+    // 检查卡片
+    const card = state.cards.find(c => !c.collected && c.x===target.x && c.y===target.y);
+    if (card) collectCard(card);
+
+    updateUI();
+    executePath(idx+1);
+  });
+}
+
+function animateStep(from, to, callback) {
+  const duration = 120;
+  const startTime = performance.now();
+  const startX = offsetX + from.x*cellSize + cellSize/2;
+  const startY = offsetY + from.y*cellSize + cellSize/2;
+  const endX = offsetX + to.x*cellSize + cellSize/2;
+  const endY = offsetY + to.y*cellSize + cellSize/2;
+
+  function anim(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(elapsed/duration, 1);
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    const cx = startX + (endX-startX)*ease;
+    const cy = startY + (endY-startY)*ease;
+
+    // 临时存储动画位置
+    canvas._animX = cx;
+    canvas._animY = cy;
+    canvas._animating = true;
+    drawMaze();
+
+    if (t < 1) {
+      requestAnimationFrame(anim);
+    } else {
+      canvas._animating = false;
+      drawMaze();
+      callback();
+    }
+  }
+  requestAnimationFrame(anim);
+}
+
+function collectCard(card) {
+  const type = PINYIN.getType(card.letter);
+  const cx = offsetX + card.x*cellSize + cellSize/2;
+  const cy = offsetY + card.y*cellSize + cellSize/2;
+
+  if (type === 'overall') {
+    // 整体认读，直接给能量，不影响携带字母
+    card.collected = true;
+    Audio.sfx_pickup();
+    state.particleSystem.emit(cx, cy, 12, {colors:['#ffd700','#ff6b6b','#4ecdc4','#fff'],speed:3,size:3,upward:1});
+    const info = PINYIN.overallMap[card.letter];
+    if (state.energy < state.maxEnergy) {
+      state.energy++;
+      showToast(`整体认读: ${info||card.letter} ⚡+1`);
+      speak((PINYIN.pronounce[card.letter]||card.letter) + (info ? '，'+info.split('-')[0] : ''));
+      Audio.sfx_success();
+      state.particleSystem.emit(cx, cy, 20, {colors:['#ffd700','#ffeb3b'],speed:4,size:5,upward:2});
+    }
+    state.completedCombos.push(card.letter);
+    updateUI();
+    return;
+  }
+
+  // 规则：只能先携带声母，韵母不可单独携带
+  if (!state.carried) {
+    if (type === 'initial') {
+      // 拾取声母
+      card.collected = true;
+      Audio.sfx_pickup();
+      state.particleSystem.emit(cx, cy, 12, {colors:['#ffd700','#ff6b6b'],speed:3,size:3,upward:1});
+      state.carried = {letter:card.letter, type, cardIdx:card.idx};
+      speak(PINYIN.pronounce[card.letter] || card.letter);
+    } else {
+      // 韵母不能单独拾取
+      showToast('先收集声母吧！🔤');
+    }
+    updateUI();
+    return;
+  }
+
+  // 已携带声母
+  if (type === 'initial') {
+    // 已携带声母，不能重复拾取声母
+    showToast('已经携带声母了，去找韵母组合吧！');
+    return;
+  }
+
+  // type === 'final'，检查拼音组合
+  const result = PINYIN.checkCombo(state.carried.letter, card.letter);
+  if (result) {
+    card.collected = true;
+    Audio.sfx_pickup();
+    state.particleSystem.emit(cx, cy, 12, {colors:['#ffd700','#4ecdc4','#fff'],speed:3,size:3,upward:1});
+    const [hz, py] = result.split('-');
+    showComboFeedback(cx, cy, `${state.carried.letter}+${card.letter}→${hz}`);
+    speak(`${PINYIN.pronounce[state.carried.letter]||state.carried.letter}+${PINYIN.pronounce[card.letter]||card.letter}，拼成${hz}`);
+    Audio.sfx_success();
+    if (state.energy < state.maxEnergy) state.energy++;
+    state.particleSystem.emit(cx, cy, 25, {colors:['#ffd700','#ff6b6b','#4ecdc4','#ffeb3b','#fff'],speed:5,size:4,upward:2});
+    state.completedCombos.push(`${state.carried.letter}+${card.letter}`);
+    state.carried = null;
+  } else {
+    // 不能组合，保留声母
+    showToast('不能拼在一起哦~');
+    Audio.sfx_fail();
+  }
+  updateUI();
+}
+
+function breakWall(x, y) {
+  state.grid[y][x] = 0;
+  state.energy--;
+  Audio.sfx_break();
+  const cx = offsetX + x*cellSize + cellSize/2;
+  const cy = offsetY + y*cellSize + cellSize/2;
+  state.particleSystem.emit(cx, cy, 20, {
+    colors: ['#8d6e63','#a1887f','#bcaaa4','#d7ccc8','#fff'],
+    speed: 4, size: 5,
+  });
+  updateUI();
+  // 破墙后自动移动到该格子
+  const path = findPath(state.playerPos, {x, y});
+  if (path && path.length > 1) {
+    state.path = path;
+    state.moving = true;
+    executePath(0);
+  }
+}
+
+function checkWin() {
+  const level = state.currentLevel;
+  // 检查是否到达出口
+  const exitCell = state.grid[state.playerPos.y][state.playerPos.x];
+  if (exitCell === 3) {
+    if (state.completedCombos.length >= level.minCombos) {
+      winLevel();
+    } else {
+      showToast(`还需要完成 ${level.minCombos - state.completedCombos.length} 个拼音组合~`);
+    }
+  }
+}
+
+function winLevel() {
+  state.moving = true; // 阻止进一步操作
+  Audio.sfx_win();
+
+  const level = state.currentLevel;
+  const progress = loadProgress();
+  const comboCount = state.completedCombos.length;
+  const minRequired = level.minCombos;
+  let stars = 1;
+  if (comboCount >= level.requiredCombos.length) stars = 3;
+  else if (comboCount >= minRequired + 1) stars = 2;
+
+  const prev = progress[level.id];
+  if (!prev || stars > prev.stars) {
+    progress[level.id] = {stars, completed:true};
+  }
+  if (level.id < LEVEL_CONFIGS.length) {
+    progress[level.id+1] = progress[level.id+1] || {completed:false, stars:0};
+  }
+  saveProgress(progress);
+
+  speak('太棒了！你通过了！');
+
+  // 粒子庆祝
+  for (let i=0;i<5;i++) {
+    setTimeout(()=>{
+      state.particleSystem.emit(
+        offsetX+Math.random()*cellSize*state.currentLevel.size[0],
+        offsetY+Math.random()*cellSize*state.currentLevel.size[1],
+        15, {colors:['#ffd700','#ff6b6b','#4ecdc4','#a29bfe','#ffeb3b'],speed:4,size:5,upward:2}
+      );
+    }, i*200);
+  }
+
+  setTimeout(()=>showWinPopup(stars), 600);
+}
+
+function showWinPopup(stars) {
+  const level = state.currentLevel;
+  const starEmoji = ['','⭐','🌟🌟','🌟🌟🌟'];
+  const popup = document.createElement('div');
+  popup.className = 'overlay';
+  popup.innerHTML = `
+    <div class="popup">
+      <h2>🎉 恭喜过关！</h2>
+      <div class="stars-display">${starEmoji[stars]}</div>
+      <p>完成了 ${state.completedCombos.length} 个拼音组合</p>
+      <p>破墙次数: ${state.maxEnergy-state.energy} 次</p>
+      <div class="popup-btns">
+        <button class="game-btn" id="btn-replay" style="background:rgba(255,165,0,0.3);border:2px solid rgba(255,165,0,0.5)">🔄 再玩一次</button>
+        ${level.id < LEVEL_CONFIGS.length ? `<button class="game-btn" id="btn-next" style="background:rgba(100,200,255,0.3);border:2px solid rgba(100,200,255,0.5)">▶ 下一关</button>` : ''}
+        <button class="game-btn" id="btn-select" style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3)">📋 选关</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('game-container').appendChild(popup);
+
+  popup.querySelector('#btn-replay').onclick = ()=>{ popup.remove(); startLevel(level.id); };
+  popup.querySelector('#btn-select').onclick = ()=>{ popup.remove(); showLevelSelect(); };
+  const nextBtn = popup.querySelector('#btn-next');
+  if (nextBtn) nextBtn.onclick = ()=>{ popup.remove(); startLevel(level.id+1); };
+}
+
+function resetLevel() {
+  Audio.sfx_click();
+  startLevel(state.currentLevel.id);
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.animation = 'none';
+  toast.offsetHeight;
+  toast.style.animation = 'toastPop 0.8s ease-out forwards';
+}
+
+function showComboFeedback(x, y, text) {
+  const el = document.getElementById('combo-text');
+  el.textContent = text;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.animation = 'none';
+  el.offsetHeight;
+  el.style.animation = 'comboFloat 1s ease-out forwards';
+}
+
+// =========================== 关卡选择 ===========================
+function showLevelSelect() {
+  stopGameLoop();
+  document.getElementById('side-left').style.display = 'none';
+  document.getElementById('side-right').style.display = 'none';
+  document.querySelectorAll('.overlay').forEach(e=>e.remove());
+
+  const progress = loadProgress();
+  const container = document.getElementById('level-select');
+  container.style.display = 'flex';
+
+  let html = `
+    <h1>拼音小勇士</h1>
+    <div class="subtitle">迷宫大冒险</div>
+    <div class="level-grid">
+  `;
+
+  const themes = ['🌳','🌿','🍬','⭐','🌈','🏰'];
+  for (let i=0;i<LEVEL_CONFIGS.length;i++) {
+    const lvl = LEVEL_CONFIGS[i];
+    const p = progress[lvl.id];
+    const locked = i>0 && !progress[lvl.id-1]?.completed;
+    const stars = p?.stars || 0;
+    const starStr = stars>0 ? '⭐'.repeat(stars) : '';
+    html += `
+      <div class="level-card${locked?' locked':''}" data-level="${lvl.id}"
+           style="background:${locked?'#333':['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6'][i]};border-color:${locked?'#555':['#c0392b','#d35400','#f39c12','#27ae60','#2980b9','#8e44ad'][i]}">
+        <div style="font-size:28px">${themes[i]}</div>
+        <div class="level-num">${locked?'🔒':lvl.id}</div>
+        <div style="font-size:13px">${lvl.name.replace(/第\d+关[·•]/,'')}</div>
+        <div class="level-stars">${starStr||(locked?'':'☆')}</div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+
+  container.querySelectorAll('.level-card:not(.locked)').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      Audio.sfx_click();
+      const id = parseInt(card.dataset.level);
+      startLevel(id);
+    });
+  });
+
+  // 不显示canvas（关卡选择时）
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  canvas.style.display = 'none';
+}
+
+// =========================== 游戏循环 ===========================
+let gameLoopId;
+function startGameLoop() {
+  canvas.style.display = 'block';
+  stopGameLoop();
+  function loop() {
+    if (state.currentLevel) {
+      if (!state.moving) {
+        if (state.particleSystem) state.particleSystem.update();
+      }
+      drawMaze();
+    }
+    gameLoopId = requestAnimationFrame(loop);
+  }
+  loop();
+}
+
+function stopGameLoop() {
+  if (gameLoopId) { cancelAnimationFrame(gameLoopId); gameLoopId = null; }
+}
+
+// =========================== 事件处理 ===========================
+canvas.addEventListener('click', (e) => {
+  if (state.moving || !state.currentLevel) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  const gridX = Math.floor((mx - offsetX) / cellSize);
+  const gridY = Math.floor((my - offsetY) / cellSize);
+
+  const level = state.currentLevel;
+  if (gridX<0||gridX>=level.size[0]||gridY<0||gridY>=level.size[1]) return;
+
+  movePlayer(gridX, gridY);
+});
+
+// 触摸支持
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (state.moving || !state.currentLevel) return;
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const mx = touch.clientX - rect.left;
+  const my = touch.clientY - rect.top;
+  const gridX = Math.floor((mx - offsetX) / cellSize);
+  const gridY = Math.floor((my - offsetY) / cellSize);
+  const level = state.currentLevel;
+  if (gridX<0||gridX>=level.size[0]||gridY<0||gridY>=level.size[1]) return;
+  movePlayer(gridX, gridY);
+}, {passive:false});
+
+// 按钮事件
+document.getElementById('btn-back').addEventListener('click', ()=>{
+  Audio.sfx_click();
+  showLevelSelect();
+});
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  Audio.sfx_click();
+  resetLevel();
+});
+document.getElementById('btn-hint').addEventListener('click', ()=>{
+  Audio.sfx_click();
+  state.hintActive = !state.hintActive;
+  if (state.hintActive) {
+    showToast('提示：金色虚线框是匹配目标');
+    setTimeout(()=>{ state.hintActive = false; }, 3000);
+  }
+});
+document.getElementById('btn-sound').addEventListener('click', ()=>{
+  state.soundOn = !state.soundOn;
+  document.getElementById('btn-sound').textContent = state.soundOn ? '🔊' : '🔇';
+});
+
+// 窗口大小调整
+window.addEventListener('resize', ()=>{
+  if (state.currentLevel) calcLayout();
+});
+
+// 键盘控制（PC调试用方向键直接移动一步）
+window.addEventListener('keydown', (e) => {
+  if (state.moving || !state.currentLevel) return;
+  const keyMap = {ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+  const dir = keyMap[e.key];
+  if (dir) {
+    e.preventDefault();
+    const tx = state.playerPos.x + dir[0];
+    const ty = state.playerPos.y + dir[1];
+    movePlayer(tx, ty);
+  }
+});
+
+// =========================== 初始化 ===========================
+function init() {
+  Audio.init();
+  showLevelSelect();
+  // 触摸事件需用户交互后才可播放音频
+  document.addEventListener('click', ()=>{
+    if (Audio.ctx && Audio.ctx.state==='suspended') Audio.ctx.resume();
+  }, {once:true});
+}
+
+init();
+</script>
+</body>
+</html>
