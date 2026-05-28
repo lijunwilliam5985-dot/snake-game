@@ -28,29 +28,43 @@ canvas { display:block; border-radius:12px; box-shadow:0 0 40px rgba(100,200,255
 /* 顶部状态栏 */
 #side-left {
   position:absolute; left:6px; top:50%; transform:translateY(-50%);
-  display:flex; flex-direction:column; align-items:center; gap:14px;
-  padding:16px 8px; z-index:10;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  padding:10px 6px; z-index:10;
   background:rgba(0,0,0,0.65); border-radius:20px;
   backdrop-filter:blur(8px); border:2px solid rgba(255,255,255,0.12);
-  width:95px;
+  width:105px;
+}
+@keyframes carryFlash {
+  0%,100% { box-shadow:0 0 4px rgba(255,255,255,0.3); transform:scale(1); }
+  50% { box-shadow:0 0 16px rgba(255,215,0,0.9),0 0 28px rgba(255,215,0,0.5); transform:scale(1.12); }
 }
 .carried-letter {
-  display:flex; flex-direction:column; align-items:center; gap:4px;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
 }
 .carried-letter .card-icon {
-  width:48px; height:48px; border-radius:12px; display:flex;
-  align-items:center; justify-content:center; font-size:24px; font-weight:bold;
+  width:42px; height:42px; border-radius:12px; display:flex;
+  align-items:center; justify-content:center; font-size:20px; font-weight:bold;
   color:#fff; transition:all 0.3s;
 }
 .carried-letter .card-icon.empty { background:rgba(255,255,255,0.08); border:2px dashed rgba(255,255,255,0.25); }
-.carried-letter .card-icon.initial { background:#ff6b6b; border:2px solid #ff4444; }
+.carried-letter .card-icon.initial { background:#ff6b6b; border:2px solid #ff4444; animation:carryFlash 0.7s infinite; }
 .carried-letter .card-icon.final { background:#4ecdc4; border:2px solid #2ecc71; }
 .carried-letter .card-icon.overall { background:#a29bfe; border:2px solid #6c5ce7; }
-.carried-letter .label { color:#aaa; font-size:11px; }
-.energy-display { display:flex; flex-direction:column; align-items:center; gap:2px; }
-.energy-star { font-size:22px; transition:all 0.3s; }
+.carried-letter .label { color:#aaa; font-size:10px; }
+.energy-display { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.energy-star { font-size:18px; transition:all 0.3s; }
 .energy-star.inactive { opacity:0.2; transform:scale(0.75); }
-.level-name { color:#fff; font-size:12px; font-weight:bold; text-align:center; line-height:1.3; white-space:normal; }
+.level-name { color:#fff; font-size:11px; font-weight:bold; text-align:center; line-height:1.3; white-space:normal; }
+.sidebar-section { width:100%; display:flex; flex-direction:column; gap:2px; }
+.section-title { color:#888; font-size:9px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:1px; margin-bottom:2px; }
+.letters-grid { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; max-height:130px; overflow-y:auto; }
+.letter-chip { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold; color:#fff; transition:all 0.3s; }
+.letter-chip.initial { background:#ff6b6b; border:1px solid #ff4444; }
+.letter-chip.final { background:#4ecdc4; border:1px solid #2ecc71; }
+.letter-chip.overall { background:#a29bfe; border:1px solid #6c5ce7; }
+.letter-chip.collected { opacity:0.25; }
+.letter-chip.carried { animation:carryFlash 0.7s infinite; z-index:1; }
+.combos-list { display:flex; flex-direction:column; gap:1px; max-height:80px; overflow-y:auto; font-size:9px; color:#ffd700; text-align:center; word-break:break-all; }
 
 /* 底部按钮栏 */
 #side-right {
@@ -150,12 +164,20 @@ canvas { display:block; border-radius:12px; box-shadow:0 0 40px rgba(100,200,255
   <canvas id="game-canvas"></canvas>
 
   <div id="side-left" style="display:none">
+    <div class="level-name" id="level-name-display"></div>
     <div class="carried-letter">
-      <span class="label">携带</span>
+      <span class="label">携带中</span>
       <div class="card-icon empty" id="carried-icon"></div>
     </div>
     <div class="energy-display" id="energy-display"></div>
-    <div class="level-name" id="level-name-display"></div>
+    <div class="sidebar-section">
+      <div class="section-title">关卡字母</div>
+      <div class="letters-grid" id="letters-grid"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">已拼成</div>
+      <div class="combos-list" id="combos-list"></div>
+    </div>
   </div>
 
   <div id="side-right" style="display:none">
@@ -595,7 +617,7 @@ let cellSize = 0, offsetX = 0, offsetY = 0;
 function calcLayout() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const SIDE_LEFT = 100;
+  const SIDE_LEFT = 115;
   const SIDE_RIGHT = 90;
   const availW = w - SIDE_LEFT - SIDE_RIGHT - 8;
   const availH = h - 12;
@@ -731,7 +753,7 @@ function drawMaze() {
 
     // 字母文字
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold '+(cellSize*0.35)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.font = 'bold '+(cellSize*0.48)+'px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(card.letter, cx, cy);
@@ -934,6 +956,38 @@ function updateUI() {
 
   // 关卡名
   document.getElementById('level-name-display').textContent = state.currentLevel.name;
+
+  // 字母网格（去重）
+  const grid = document.getElementById('letters-grid');
+  const level = state.currentLevel;
+  const allLetters = [...new Set([...level.initials, ...level.finals, ...level.overalls])];
+  let html = '';
+  for (const letter of allLetters) {
+    const type = PINYIN.getType(letter);
+    const collected = state.cards.find(c => c.letter === letter && c.collected);
+    const isCarried = state.carried && state.carried.letter === letter;
+    let cls = 'letter-chip ' + type;
+    if (collected) cls += ' collected';
+    if (isCarried) cls += ' carried';
+    html += `<div class="${cls}">${letter}</div>`;
+  }
+  grid.innerHTML = html;
+
+  // 已拼组合（显示拼音如 p+o=po，不显示汉字）
+  const list = document.getElementById('combos-list');
+  list.innerHTML = state.completedCombos.map(c => {
+    if (typeof c === 'string' && c.includes('+')) {
+      const parts = c.split('+');
+      const a = parts[0], b = parts.slice(1).join('+');
+      const result = PINYIN.checkCombo(a, b);
+      if (result) {
+        const [hz, py] = result.split('-');
+        const plain = py.normalize('NFD').replace(/[̀-ͯ]/g, '');
+        return `<span>${a}+${b}=${plain}</span>`;
+      }
+    }
+    return `<span>${c}</span>`;
+  }).join('');
 }
 
 function movePlayer(targetX, targetY) {
@@ -1071,7 +1125,8 @@ function collectCard(card) {
     Audio.sfx_pickup();
     state.particleSystem.emit(cx, cy, 12, {colors:['#ffd700','#4ecdc4','#fff'],speed:3,size:3,upward:1});
     const [hz, py] = result.split('-');
-    showComboFeedback(cx, cy, `${state.carried.letter}+${card.letter}→${hz}`);
+    const plainPy = py.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    showComboFeedback(cx, cy, `${state.carried.letter}+${card.letter}=${plainPy}`);
     speak(`${PINYIN.pronounce[state.carried.letter]||state.carried.letter}+${PINYIN.pronounce[card.letter]||card.letter}，拼成${hz}`);
     Audio.sfx_success();
     if (state.energy < state.maxEnergy) state.energy++;
